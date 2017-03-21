@@ -1,0 +1,78 @@
+#+TITLE: Formula-based models for fMRI GLMs
+
+Want to be able to use formulas to generate fMRI GLM model matrices in order to
+support, say, proper mixed models for fMRI analysis.  Idea is to create a
+formula dialect that can link a table of event information with volume data.
+
+* Design
+
+  The design challenge is how to transform from tidy events (one row per event,
+  with columns for timing, run, subject) to fMRI data space (a big 4D array, or
+  equivalently the activation timecourse for a single voxel across some or all
+  brains).  We only have to do that transformation once though (construct the
+  fixed and random effect model matrices).
+
+  Think of events and volume information as two tables that need to be joined.
+  Common keys of time and file/run/subject identifiers.  It's not as simple as a
+  join because you need the HRF to join between TR time and event time.  But the
+  data table needs to hold both these data sources and how to map between them.
+  
+** Event data
+
+   One row per event, columns for event data (condition, covariates, etc.) and
+   keys into the volume data (subject, session, run).
+
+** Volume data
+
+   Something that can be indexed by time and voxel?  Think of it as a big 4D
+   (x,y,z,tr) array or a 2D (vox,tr) array.  Plus metadata that gives the time
+   and run/session/subject.
+
+** Linking between event and volume data
+
+   For generating the model matrix, all you need is the time and group for each
+   TR.  The group is only necessary to prevent spillover from HRF in one
+   run/subject to another.
+
+   Basic operation is you have an event at time t for group g, and an HRF
+   function, and you evaluate this function at TR times for group g.
+
+   You could do this by actually constructing a vector.  Or by creating an
+   indexable HRF type which has an offset field and will return the value of hte
+   HRF at the time it's indexed at.  That seems like too much complexity I think.
+   
+** Generating model matrix
+
+   1. Pre-allocate model matrix columns.
+   2. Loop over events.  Create HRF function/template for this event (and maybe
+      time indices in the fMRI data/model matrix rows where it's nonzero)
+   3. Loop over terms, generate columns "as usual" (using indicator columns for
+      factors), replacing missing values with zero.  Then outer-product with the
+      HRF template and add to the relevant block of the model matrix
+      
+   Alternatively, just generate the model matrix in the usual way, generate an
+   event/model matrix row-to-TR transformer using the HRFs and event times, and
+   multiply them.  That's good because all the work happens in the data
+   structure that links the event table with the BOLD time series.
+   
+** Formula
+
+   First thought: use a special function like =event(stim_class)= to specify that
+   a column should be converted into events.  But I think all you need to do is
+   convert all categorical columns into events.  And continuous columns are
+   treated as covariates.  But then you need to be able to check that someone's
+   not doing something dumb like having a covariate not attached to an event.
+
+*** Complications
+
+    It would be nice to allow contrast coding, but the redundancy rules are
+    different for this sort of formula.  They need to be calculated within each
+    event type.  That is, full dummy coding makes sense for all the events, even
+    if a baseline is included.
+
+    How to handle different events that have different covariates?  Use
+    Nullable/DataArrays for colums with missing values when they don't apply,
+    and replace those with zeros in the model matrix.  But this means that we
+    can't just re-use the existing code (since it removes Null/NA values).
+    Could just add a flag that changes that though (like apparently is
+    intended).
