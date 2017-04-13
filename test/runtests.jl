@@ -1,5 +1,3 @@
-using FMRIModels
 using Base.Test
+using FMRIModels
 
-# write your own tests here
-@test 1 == 2

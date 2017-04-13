@@ -1,5 +1,9 @@
 module FMRIModels
 
-# package code goes here
+using CategoricalArrays, DataArrays, NIfTI
 
-end # module
+import MixedModels: ReMat
+
+export ExpandedReMat
+
+end
